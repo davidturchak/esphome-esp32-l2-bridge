@@ -43,11 +43,18 @@ void WiFiBridge::start_ap_() {
     return;
   }
 
-  // IDF auto-starts a local DHCPS on AP_START. Stop it from the
-  // AP_START handler — the L2 bridge proxies upstream DHCP, a local
-  // DHCPS would race the upstream server and hand out 192.168.4.x
-  // leases instead of putting AP clients on the upstream subnet.
+  // Two event handlers:
+  // - AP_START: IDF auto-starts a local DHCPS; stop it (L2 bridge proxies
+  //   upstream DHCP, a local DHCPS races the upstream server).
+  // - STA_CONNECTED: defensive re-arm of WIFI_MODE_APSTA. Stock wifi:'s
+  //   wifi_component.cpp:1563 calls wifi_mode_({}, false) when STA
+  //   connects IF the user accidentally left an `ap:` block under
+  //   `wifi:`. That puts the radio back into STA-only and silently
+  //   kills our broadcast. Flipping mode back here makes the misconfig
+  //   merely noisy in logs instead of breaking the bridge entirely.
   esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_START,
+                             &WiFiBridge::event_handler_, this);
+  esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_CONNECTED,
                              &WiFiBridge::event_handler_, this);
 
   // Switch to APSTA — STA stays up, AP comes up. esp_wifi_set_mode is
@@ -88,15 +95,34 @@ void WiFiBridge::start_ap_() {
 void WiFiBridge::event_handler_(void *arg, esp_event_base_t base, int32_t id,
                                 void *data) {
   auto *self = static_cast<WiFiBridge *>(arg);
-  if (base != WIFI_EVENT || id != WIFI_EVENT_AP_START)
+  if (base != WIFI_EVENT)
     return;
-  if (self->ap_netif_ == nullptr)
+
+  if (id == WIFI_EVENT_AP_START) {
+    if (self->ap_netif_ == nullptr)
+      return;
+    esp_err_t err = esp_netif_dhcps_stop(self->ap_netif_);
+    if (err == ESP_OK) {
+      ESP_LOGI(TAG, "Local AP DHCPS disabled (L2 bridge proxies upstream DHCP)");
+    } else if (err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
+      ESP_LOGW(TAG, "esp_netif_dhcps_stop returned: %s", esp_err_to_name(err));
+    }
     return;
-  esp_err_t err = esp_netif_dhcps_stop(self->ap_netif_);
-  if (err == ESP_OK) {
-    ESP_LOGI(TAG, "Local AP DHCPS disabled (L2 bridge proxies upstream DHCP)");
-  } else if (err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
-    ESP_LOGW(TAG, "esp_netif_dhcps_stop returned: %s", esp_err_to_name(err));
+  }
+
+  if (id == WIFI_EVENT_STA_CONNECTED) {
+    // Re-arm APSTA mode. Stock wifi: drops the radio to STA-only here
+    // (wifi_component.cpp:1563) when its has_ap() is true — usually a
+    // user-config mistake (an `ap:` block left under `wifi:`). If
+    // we're already in APSTA, esp_wifi_set_mode is a no-op.
+    wifi_mode_t mode = WIFI_MODE_NULL;
+    if (esp_wifi_get_mode(&mode) == ESP_OK && mode != WIFI_MODE_APSTA) {
+      ESP_LOGW(TAG, "Mode is %d after STA connect, forcing APSTA "
+                    "(remove `ap:` from your `wifi:` block to silence)",
+               static_cast<int>(mode));
+      esp_wifi_set_mode(WIFI_MODE_APSTA);
+    }
+    return;
   }
 }
 
