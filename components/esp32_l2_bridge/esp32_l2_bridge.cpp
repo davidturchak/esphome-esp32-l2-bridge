@@ -4,6 +4,7 @@
 
 #include "esp_event.h"
 #include "esp_netif.h"
+#include "esp_wifi.h"
 #include "esp_wifi_types.h"
 
 extern "C" {
@@ -31,6 +32,8 @@ void L2Bridge::setup() {
   // do that. Create it defensively. Returns ESP_ERR_INVALID_STATE if already
   // exists, which we ignore.
   esp_event_loop_create_default();
+  // ANY_ID covers WIFI_EVENT_AP_START (install AP hooks),
+  // WIFI_EVENT_AP_STADISCONNECTED (evict by MAC), and others we ignore.
   esp_err_t r1 = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                             &L2Bridge::event_handler_, this);
   esp_err_t r2 = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
@@ -73,6 +76,20 @@ void L2Bridge::event_handler_(void *arg, esp_event_base_t base, int32_t id,
         bridge_netif_hooks_init_ap(ap);
         self->ap_hooked_ = true;
       }
+    }
+  } else if (base == WIFI_EVENT && id == WIFI_EVENT_AP_STADISCONNECTED) {
+    // Client left the AP — drop its FDB and lease-map entries so the
+    // diagnostic entities reflect physical reality. The data plane will
+    // re-learn on reassoc via DHCP-ACK or ARP traffic.
+    auto *ev = static_cast<wifi_event_ap_stadisconnected_t *>(data);
+    bool fdb_hit = fdb_evict_by_mac(ev->mac);
+    bool lease_hit = dhcp_lease_map_evict_by_mac(ev->mac);
+    if (fdb_hit || lease_hit) {
+      ESP_LOGI(TAG,
+               "Client %02x:%02x:%02x:%02x:%02x:%02x left — evicted "
+               "(fdb=%s, lease=%s)",
+               ev->mac[0], ev->mac[1], ev->mac[2], ev->mac[3], ev->mac[4],
+               ev->mac[5], fdb_hit ? "yes" : "no", lease_hit ? "yes" : "no");
     }
   } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
     if (!self->sta_hooked_) {

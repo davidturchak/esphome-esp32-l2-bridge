@@ -34,6 +34,9 @@ bool dhcp_lease_map_lookup(const uint8_t mac[6], uint32_t *ip_out,
 /* Look up by hostname (case-insensitive); returns true if found with ip != 0. */
 bool dhcp_lease_map_lookup_by_hostname(const char *hostname, uint32_t *ip_out);
 
+/* Drop the entry with this MAC. Returns true if an entry was removed. */
+bool dhcp_lease_map_evict_by_mac(const uint8_t mac[6]);
+
 /* Fill out[] with up to max non-expired entries; returns count written. */
 int dhcp_lease_map_snapshot(dhcp_lease_entry_t *out, int max);
 

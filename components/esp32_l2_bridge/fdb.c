@@ -90,6 +90,18 @@ uint32_t fdb_lookup_by_mac(const uint8_t mac[6]) {
     return 0;
 }
 
+bool fdb_evict_by_mac(const uint8_t mac[6]) {
+    bool removed = false;
+    for (int i = 0; i < REPEATER_FDB_SIZE; i++) {
+        fdb_entry_t *e = &s_fdb[i];
+        if (e->valid && mac_eq(e->mac, mac)) {
+            e->valid = false;
+            removed = true;
+        }
+    }
+    return removed;
+}
+
 void fdb_age(void) {
     int64_t now = esp_timer_get_time();
     for (int i = 0; i < REPEATER_FDB_SIZE; i++) {

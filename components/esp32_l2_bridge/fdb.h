@@ -9,6 +9,8 @@ void fdb_init(void);
 void fdb_learn(uint32_t ip, const uint8_t mac[6], uint32_t ttl_seconds);
 bool fdb_lookup_by_ip(uint32_t ip, uint8_t mac_out[6]);
 uint32_t fdb_lookup_by_mac(const uint8_t mac[6]);
+/* Drop any entry whose MAC matches; returns true if an entry was removed. */
+bool fdb_evict_by_mac(const uint8_t mac[6]);
 void fdb_age(void);
 void fdb_clear(void);
 

@@ -142,6 +142,18 @@ void dhcp_lease_map_set_hostname(const uint8_t mac[6], const char *hostname) {
     e->valid = true;
 }
 
+bool dhcp_lease_map_evict_by_mac(const uint8_t mac[6]) {
+    bool removed = false;
+    for (int i = 0; i < DHCP_LEASE_MAP_SIZE; i++) {
+        dhcp_lease_entry_t *e = &s_map[i];
+        if (e->valid && memcmp(e->mac, mac, 6) == 0) {
+            e->valid = false;
+            removed = true;
+        }
+    }
+    return removed;
+}
+
 int dhcp_lease_map_snapshot(dhcp_lease_entry_t *out, int max) {
     int64_t now = esp_timer_get_time();
     int n = 0;
