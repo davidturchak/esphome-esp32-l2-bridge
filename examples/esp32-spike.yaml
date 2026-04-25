@@ -1,0 +1,94 @@
+# Spike example: AP+STA L2 bridge + native HA integration (M1 → M5).
+#
+# Architecture:
+#   - Stock `wifi:` handles STA upstream + provides `network:` so api/ota/
+#     web_server work. wifi: must NOT include an `ap:` block (that would
+#     trigger its disable-AP-on-STA-connect path).
+#   - `wifi_bridge:` runs at AFTER_WIFI priority and brings the AP up in
+#     APSTA mode after wifi: has started STA.
+#   - `esp32_l2_bridge:` installs lwIP hooks on AP_START and STA_GOT_IP,
+#     bridges DHCP and L2 traffic by MAC translation.
+#
+# Flash with:  esphome run examples/esp32-spike.yaml
+# After boot:
+#   - Connect a phone to the "Repeater-Spike" AP. It receives a DHCP lease
+#     from the *upstream* subnet (not 192.168.4.x).
+#   - HA auto-discovers all entities (FDB Entries, DHCP Leases, Upstream
+#     RSSI, Connected Clients, STA Link, Clear FDB).
+
+esphome:
+  name: l2-bridge-spike
+  friendly_name: L2 Bridge Spike
+
+esp32:
+  board: esp32doit-devkit-v1
+  framework:
+    type: esp-idf
+    log_level: INFO
+    sdkconfig_options:
+      CONFIG_LWIP_IP_FORWARD: "y"
+      CONFIG_LWIP_L2_TO_L3_COPY: "y"
+      CONFIG_ESP_WIFI_IRAM_OPT: "y"
+      CONFIG_ESP_WIFI_RX_IRAM_OPT: "y"
+      CONFIG_LWIP_IRAM_OPTIMIZATION: "y"
+      CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240: "y"
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+
+# Stock wifi: handles upstream STA. NO `ap:` block here — wifi_bridge
+# brings the AP up itself (so wifi:'s "disable AP on STA connect" path
+# stays gated out at compile time).
+wifi:
+  ssid: !secret upstream_ssid
+  password: !secret upstream_pass
+
+wifi_bridge:
+  ap:
+    ssid: "Repeater-Spike"
+    password: !secret ap_pass
+    max_clients: 8
+
+esp32_l2_bridge:
+  fdb_size: 32
+  fdb_default_ttl: 600s
+  xid_map_size: 16
+  xid_ttl: 30s
+  dhcp_snoop: true
+
+sensor:
+  - platform: esp32_l2_bridge
+    type: fdb_occupancy
+    name: "FDB Entries"
+  - platform: esp32_l2_bridge
+    type: dhcp_lease_count
+    name: "DHCP Leases"
+  - platform: esp32_l2_bridge
+    type: sta_rssi
+    name: "Upstream RSSI"
+
+text_sensor:
+  - platform: esp32_l2_bridge
+    type: connected_clients
+    name: "Connected Clients"
+
+binary_sensor:
+  - platform: esp32_l2_bridge
+    type: sta_link
+    name: "STA Link"
+
+button:
+  - platform: esp32_l2_bridge
+    type: fdb_clear
+    name: "Clear FDB"
+
+logger:
+  level: INFO
+
+api:
+ota:
+  - platform: esphome
+web_server:
+  port: 80

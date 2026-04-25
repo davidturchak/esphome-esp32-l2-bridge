@@ -1,0 +1,19 @@
+# ESPHome / PlatformIO build artifacts
+.esphome/
+build/
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Local secrets — copy secrets.yaml.example to secrets.yaml and fill in
+secrets.yaml
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+*.swp
