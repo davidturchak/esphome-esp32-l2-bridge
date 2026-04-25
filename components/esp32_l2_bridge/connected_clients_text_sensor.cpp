@@ -3,11 +3,14 @@
 #ifdef USE_ESP_IDF
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include "esphome/core/log.h"
+#include "esp_wifi.h"
 
 extern "C" {
 #include "dhcp_lease_map.h"
+#include "fdb.h"
 }
 
 namespace esphome {
@@ -87,13 +90,41 @@ static std::string format_text(const dhcp_lease_entry_t *leases, int n) {
   return out;
 }
 
+// Source of truth is the AP-associated station list (covers both DHCP and
+// static-IP clients). For each MAC we enrich with hostname + IP from the
+// lease map; if the client never DHCPed we fall back to the FDB for the IP
+// and leave the hostname empty (the formatter will show the MAC instead).
 void ConnectedClientsTextSensor::update() {
-  dhcp_lease_entry_t leases[DHCP_LEASE_MAP_SIZE];
-  int n = dhcp_lease_map_snapshot(leases, DHCP_LEASE_MAP_SIZE);
+  wifi_sta_list_t sta_list;
+  if (esp_wifi_ap_get_sta_list(&sta_list) != ESP_OK) {
+    this->publish_state(this->format_ == ConnectedClientsFormat::JSON ? "[]"
+                                                                      : "");
+    return;
+  }
+
+  dhcp_lease_entry_t entries[DHCP_LEASE_MAP_SIZE];
+  int n = 0;
+  for (int i = 0;
+       i < sta_list.num && n < static_cast<int>(DHCP_LEASE_MAP_SIZE); i++) {
+    std::memset(&entries[n], 0, sizeof(entries[n]));
+    std::memcpy(entries[n].mac, sta_list.sta[i].mac, 6);
+
+    uint32_t ip = 0;
+    char hostname[DHCP_LEASE_HOSTNAME_MAX] = {0};
+    if (dhcp_lease_map_lookup(entries[n].mac, &ip, hostname,
+                              DHCP_LEASE_HOSTNAME_MAX)) {
+      entries[n].ip = ip;
+      std::strncpy(entries[n].hostname, hostname,
+                   DHCP_LEASE_HOSTNAME_MAX - 1);
+    } else {
+      entries[n].ip = fdb_lookup_by_mac(entries[n].mac);
+    }
+    n++;
+  }
 
   std::string out = (this->format_ == ConnectedClientsFormat::JSON)
-                        ? format_json(leases, n)
-                        : format_text(leases, n);
+                        ? format_json(entries, n)
+                        : format_text(entries, n);
   this->publish_state(out);
 }
 
