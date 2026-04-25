@@ -1,7 +1,8 @@
 """Text sensor platform for esp32_l2_bridge.
 
-Currently only one type — `connected_clients`, a JSON-encoded snapshot of
-the DHCP lease map (mac/ip/hostname per AP-side client).
+Currently one type — `connected_clients`, a snapshot of the DHCP lease map
+(MAC / IP / hostname). Default format is human-readable ("hostname (ip), …");
+set `format: json` for a JSON array suitable for HA templating.
 """
 
 import esphome.codegen as cg
@@ -16,6 +17,15 @@ DEPENDENCIES = ["esp32_l2_bridge"]
 ConnectedClientsTextSensor = esp32_l2_bridge_ns.class_(
     "ConnectedClientsTextSensor", text_sensor.TextSensor, cg.PollingComponent
 )
+ConnectedClientsFormat = esp32_l2_bridge_ns.enum(
+    "ConnectedClientsFormat", is_class=True
+)
+
+CONF_FORMAT = "format"
+FORMATS = {
+    "text": ConnectedClientsFormat.TEXT,
+    "json": ConnectedClientsFormat.JSON,
+}
 
 
 CONFIG_SCHEMA = cv.typed_schema(
@@ -24,7 +34,15 @@ CONFIG_SCHEMA = cv.typed_schema(
             ConnectedClientsTextSensor,
             icon="mdi:account-multiple",
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ).extend(cv.polling_component_schema("15s")),
+        )
+        .extend(cv.polling_component_schema("15s"))
+        .extend(
+            {
+                cv.Optional(CONF_FORMAT, default="text"): cv.enum(
+                    FORMATS, lower=True
+                ),
+            }
+        ),
     }
 )
 
@@ -32,3 +50,4 @@ CONFIG_SCHEMA = cv.typed_schema(
 async def to_code(config):
     var = await text_sensor.new_text_sensor(config)
     await cg.register_component(var, config)
+    cg.add(var.set_format(FORMATS[config[CONF_FORMAT]]))
