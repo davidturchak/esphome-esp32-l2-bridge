@@ -1,13 +1,12 @@
 """Text sensor platform for esp32_l2_bridge.
 
-Currently one type — `connected_clients`. Sources are merged so a client
-shows up if either knows about it:
-  - esp_wifi_ap_get_sta_list() — currently associated to our AP
-  - DHCP lease map              — DHCPed through the bridge
-Static-IP clients show an IP once they've sent any traffic (via FDB
-lookup). The ESP32's own STA MAC is filtered out. Default format is
-human-readable ("hostname (ip), …"); set `format: json` for a JSON array
-suitable for HA templating.
+Types:
+  - connected_clients — merged source (AP sta_list + DHCP lease map),
+    minus the ESP32's own STA MAC. Default format is human-readable
+    ("hostname (ip), …"); set `format: json` for a JSON array suitable
+    for HA templating.
+  - sta_mac / ap_mac — diagnostic identity values, published once at
+    setup. Static for the life of the device.
 """
 
 import esphome.codegen as cg
@@ -25,11 +24,20 @@ ConnectedClientsTextSensor = esp32_l2_bridge_ns.class_(
 ConnectedClientsFormat = esp32_l2_bridge_ns.enum(
     "ConnectedClientsFormat", is_class=True
 )
+IdentityTextSensor = esp32_l2_bridge_ns.class_(
+    "IdentityTextSensor", text_sensor.TextSensor, cg.Component
+)
+IdentityKind = esp32_l2_bridge_ns.enum("IdentityKind", is_class=True)
 
 CONF_FORMAT = "format"
 FORMATS = {
     "text": ConnectedClientsFormat.TEXT,
     "json": ConnectedClientsFormat.JSON,
+}
+
+IDENTITY_KINDS = {
+    "sta_mac": IdentityKind.STA_MAC,
+    "ap_mac": IdentityKind.AP_MAC,
 }
 
 
@@ -48,6 +56,16 @@ CONFIG_SCHEMA = cv.typed_schema(
                 ),
             }
         ),
+        "sta_mac": text_sensor.text_sensor_schema(
+            IdentityTextSensor,
+            icon="mdi:network-outline",
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
+        "ap_mac": text_sensor.text_sensor_schema(
+            IdentityTextSensor,
+            icon="mdi:access-point-network",
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
     }
 )
 
@@ -55,4 +73,8 @@ CONFIG_SCHEMA = cv.typed_schema(
 async def to_code(config):
     var = await text_sensor.new_text_sensor(config)
     await cg.register_component(var, config)
-    cg.add(var.set_format(FORMATS[config[CONF_FORMAT]]))
+    type_ = config["type"]
+    if type_ == "connected_clients":
+        cg.add(var.set_format(FORMATS[config[CONF_FORMAT]]))
+    else:
+        cg.add(var.set_kind(IDENTITY_KINDS[type_]))
