@@ -107,6 +107,13 @@ text_sensor:
   - platform: esp32_l2_bridge
     type: connected_clients
     name: "Connected Clients"
+    # format: text   # default; "json" for machine-readable
+  - platform: esp32_l2_bridge
+    type: sta_mac
+    name: "STA MAC"
+  - platform: esp32_l2_bridge
+    type: ap_mac
+    name: "AP MAC"
 
 binary_sensor:
   - platform: esp32_l2_bridge
@@ -161,7 +168,9 @@ indistinguishable on the network from devices on the upstream router.
 | `sensor`        | `fdb_occupancy`      | Count of valid IP→MAC FDB entries.                       |
 | `sensor`        | `dhcp_lease_count`   | Count of non-expired entries in the DHCP lease map.      |
 | `sensor`        | `sta_rssi`           | Upstream signal strength (dBm) via `esp_wifi_sta_get_ap_info`. |
-| `text_sensor`   | `connected_clients`  | JSON array of `{mac, ip, hostname}` per AP-side client.  |
+| `text_sensor`   | `connected_clients`  | Merged sta-list + lease-map view of AP clients. Default `format: text` ("hostname (ip), …", MAC fallback); `format: json` for `[{mac,ip,hostname}]`. |
+| `text_sensor`   | `sta_mac`            | Upstream-side MAC (one-shot, published at boot).         |
+| `text_sensor`   | `ap_mac`             | AP-side MAC (one-shot, published at boot).               |
 | `binary_sensor` | `sta_link`           | True while the upstream STA association is up.           |
 | `button`        | `fdb_clear`          | Press to flush the FDB.                                  |
 
