@@ -90,37 +90,61 @@ static std::string format_text(const dhcp_lease_entry_t *leases, int n) {
   return out;
 }
 
-// Source of truth is the AP-associated station list (covers both DHCP and
-// static-IP clients). For each MAC we enrich with hostname + IP from the
-// lease map; if the client never DHCPed we fall back to the FDB for the IP
-// and leave the hostname empty (the formatter will show the MAC instead).
+// We merge two sources so a client shows up if either knows about it:
+//   1. esp_wifi_ap_get_sta_list() — currently associated to our AP
+//   2. dhcp_lease_map snapshot     — DHCPed through the bridge
+// Each MAC appears once. The ESP32's own STA MAC is filtered out so a
+// snooped self-renew on the upstream side doesn't masquerade as a client.
 void ConnectedClientsTextSensor::update() {
-  wifi_sta_list_t sta_list;
-  if (esp_wifi_ap_get_sta_list(&sta_list) != ESP_OK) {
-    this->publish_state(this->format_ == ConnectedClientsFormat::JSON ? "[]"
-                                                                      : "");
-    return;
-  }
+  uint8_t self_sta_mac[6] = {0};
+  esp_wifi_get_mac(WIFI_IF_STA, self_sta_mac);
 
   dhcp_lease_entry_t entries[DHCP_LEASE_MAP_SIZE];
   int n = 0;
-  for (int i = 0;
-       i < sta_list.num && n < static_cast<int>(DHCP_LEASE_MAP_SIZE); i++) {
-    std::memset(&entries[n], 0, sizeof(entries[n]));
-    std::memcpy(entries[n].mac, sta_list.sta[i].mac, 6);
 
-    uint32_t ip = 0;
-    char hostname[DHCP_LEASE_HOSTNAME_MAX] = {0};
-    if (dhcp_lease_map_lookup(entries[n].mac, &ip, hostname,
-                              DHCP_LEASE_HOSTNAME_MAX)) {
-      entries[n].ip = ip;
-      std::strncpy(entries[n].hostname, hostname,
-                   DHCP_LEASE_HOSTNAME_MAX - 1);
-    } else {
-      entries[n].ip = fdb_lookup_by_mac(entries[n].mac);
+  wifi_sta_list_t sta_list;
+  int sta_n = 0;
+  if (esp_wifi_ap_get_sta_list(&sta_list) == ESP_OK) {
+    sta_n = sta_list.num;
+    for (int i = 0;
+         i < sta_list.num && n < static_cast<int>(DHCP_LEASE_MAP_SIZE); i++) {
+      const uint8_t *mac = sta_list.sta[i].mac;
+      if (std::memcmp(mac, self_sta_mac, 6) == 0) continue;
+      std::memset(&entries[n], 0, sizeof(entries[n]));
+      std::memcpy(entries[n].mac, mac, 6);
+      uint32_t ip = 0;
+      char hostname[DHCP_LEASE_HOSTNAME_MAX] = {0};
+      if (dhcp_lease_map_lookup(entries[n].mac, &ip, hostname,
+                                DHCP_LEASE_HOSTNAME_MAX)) {
+        entries[n].ip = ip;
+        std::strncpy(entries[n].hostname, hostname,
+                     DHCP_LEASE_HOSTNAME_MAX - 1);
+      } else {
+        entries[n].ip = fdb_lookup_by_mac(entries[n].mac);
+      }
+      n++;
     }
-    n++;
   }
+
+  dhcp_lease_entry_t leases[DHCP_LEASE_MAP_SIZE];
+  int lease_n = dhcp_lease_map_snapshot(leases, DHCP_LEASE_MAP_SIZE);
+  for (int i = 0;
+       i < lease_n && n < static_cast<int>(DHCP_LEASE_MAP_SIZE); i++) {
+    if (leases[i].ip == 0) continue;
+    if (std::memcmp(leases[i].mac, self_sta_mac, 6) == 0) continue;
+    bool dup = false;
+    for (int j = 0; j < n; j++) {
+      if (std::memcmp(entries[j].mac, leases[i].mac, 6) == 0) {
+        dup = true;
+        break;
+      }
+    }
+    if (dup) continue;
+    entries[n++] = leases[i];
+  }
+
+  ESP_LOGD(TAG, "update: sta_list=%d lease_map=%d merged=%d", sta_n, lease_n,
+           n);
 
   std::string out = (this->format_ == ConnectedClientsFormat::JSON)
                         ? format_json(entries, n)

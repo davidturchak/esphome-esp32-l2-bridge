@@ -1,11 +1,13 @@
 """Text sensor platform for esp32_l2_bridge.
 
-Currently one type — `connected_clients`. Source of truth is the AP's
-associated-station list, enriched with hostname + IP from the DHCP lease
-map (so DHCP clients show their hostname) and with the IP from the FDB
-(so static-IP clients still show an IP once they've sent any traffic).
-Default format is human-readable ("hostname (ip), …"); set `format: json`
-for a JSON array suitable for HA templating.
+Currently one type — `connected_clients`. Sources are merged so a client
+shows up if either knows about it:
+  - esp_wifi_ap_get_sta_list() — currently associated to our AP
+  - DHCP lease map              — DHCPed through the bridge
+Static-IP clients show an IP once they've sent any traffic (via FDB
+lookup). The ESP32's own STA MAC is filtered out. Default format is
+human-readable ("hostname (ip), …"); set `format: json` for a JSON array
+suitable for HA templating.
 """
 
 import esphome.codegen as cg
