@@ -207,7 +207,9 @@ The vendored data plane (`fdb.{c,h}`, `repeater_forward.{c,h}`,
 `netif_hooks.{c,h}`, `dhcp_*.{c,h}`, `repeater_config.h`) is lifted with
 minor adjustments from the
 [`esp32_wifi_repeater` branch](https://github.com/davidturchak/esp32_nat_router/tree/esp32_wifi_repeater)
-of `esp32_nat_router`, originally by Martin Ger.
+of `davidturchak/esp32_nat_router`, which is itself a fork of the
+original NAT-router project by Martin Ger:
+[`martin-ger/esp32_nat_router`](https://github.com/martin-ger/esp32_nat_router).
 
 ## License
 
