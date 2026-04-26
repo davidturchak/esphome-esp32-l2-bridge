@@ -147,9 +147,12 @@ indistinguishable on the network from devices on the upstream router.
 |------------------------|---------|---------|---------------------------------------------|
 | `ap.ssid`              | string  | —       | Required.                                   |
 | `ap.password`          | string  | `""`    | < 8 chars opens an open AP.                 |
-| `ap.channel`           | 0–14    | `0`     | `0` = follow STA channel automatically.     |
 | `ap.max_clients`       | 1–10    | `8`     | RAM-bound; ESP32-C3 typically caps at 5.    |
 | `ap.hidden`            | bool    | `false` |                                             |
+
+The AP channel is not configurable: on single-radio APSTA hardware, the
+radio retunes to the STA channel as soon as upstream associates, so any
+fixed AP channel would be overridden seconds after boot.
 
 ### `esp32_l2_bridge:`
 

@@ -21,11 +21,7 @@ void WiFiBridge::dump_config() {
   ESP_LOGCONFIG(TAG, "  AP SSID: '%s' (max %u clients%s)",
                 this->ap_ssid_.c_str(), this->ap_max_clients_,
                 this->ap_hidden_ ? ", hidden" : "");
-  if (this->ap_channel_ == 0) {
-    ESP_LOGCONFIG(TAG, "  AP channel: auto (follows STA)");
-  } else {
-    ESP_LOGCONFIG(TAG, "  AP channel: %u", this->ap_channel_);
-  }
+  ESP_LOGCONFIG(TAG, "  AP channel: follows STA (single-radio APSTA)");
 }
 
 void WiFiBridge::start_ap_() {
@@ -70,7 +66,10 @@ void WiFiBridge::start_ap_() {
   std::strncpy(reinterpret_cast<char *>(ap_cfg.ap.ssid),
                this->ap_ssid_.c_str(), sizeof(ap_cfg.ap.ssid) - 1);
   ap_cfg.ap.ssid_len = this->ap_ssid_.length();
-  ap_cfg.ap.channel = this->ap_channel_;  // 0 = auto-follow STA
+  // Channel 0 = auto-follow STA. Single-radio APSTA can't honor a fixed
+  // AP channel anyway — IDF retunes the radio to STA's channel as soon
+  // as upstream associates, so we don't expose the option.
+  ap_cfg.ap.channel = 0;
   ap_cfg.ap.max_connection = this->ap_max_clients_;
   ap_cfg.ap.beacon_interval = 100;
   ap_cfg.ap.ssid_hidden = this->ap_hidden_ ? 1 : 0;

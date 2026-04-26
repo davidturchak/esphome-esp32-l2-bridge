@@ -31,7 +31,6 @@ class WiFiBridge : public Component {
 
   void set_ap_ssid(const std::string &v) { ap_ssid_ = v; }
   void set_ap_password(const std::string &v) { ap_password_ = v; }
-  void set_ap_channel(uint8_t v) { ap_channel_ = v; }
   void set_ap_max_clients(uint8_t v) { ap_max_clients_ = v; }
   void set_ap_hidden(bool v) { ap_hidden_ = v; }
 
@@ -49,7 +48,6 @@ class WiFiBridge : public Component {
 
   std::string ap_ssid_;
   std::string ap_password_;
-  uint8_t ap_channel_{0};
   uint8_t ap_max_clients_{8};
   bool ap_hidden_{false};
 };

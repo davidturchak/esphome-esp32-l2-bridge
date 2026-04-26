@@ -18,7 +18,6 @@ from esphome.const import (
     CONF_SSID,
     CONF_PASSWORD,
     CONF_AP,
-    CONF_CHANNEL,
     CONF_HIDDEN,
 )
 
@@ -34,7 +33,6 @@ AP_SCHEMA = cv.Schema(
     {
         cv.Required(CONF_SSID): cv.ssid,
         cv.Optional(CONF_PASSWORD, default=""): cv.string,
-        cv.Optional(CONF_CHANNEL, default=0): cv.int_range(min=0, max=14),
         cv.Optional(CONF_MAX_CLIENTS, default=8): cv.int_range(min=1, max=10),
         cv.Optional(CONF_HIDDEN, default=False): cv.boolean,
     }
@@ -82,6 +80,5 @@ async def to_code(config):
     ap = config[CONF_AP]
     cg.add(var.set_ap_ssid(ap[CONF_SSID]))
     cg.add(var.set_ap_password(ap[CONF_PASSWORD]))
-    cg.add(var.set_ap_channel(ap[CONF_CHANNEL]))
     cg.add(var.set_ap_max_clients(ap[CONF_MAX_CLIENTS]))
     cg.add(var.set_ap_hidden(ap[CONF_HIDDEN]))
